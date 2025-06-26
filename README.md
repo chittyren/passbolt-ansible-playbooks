@@ -9,6 +9,15 @@
 	Copyright (c) 2025 Passbolt SA
 	https://www.passbolt.com
 
+
+> 📘 **Looking for the official documentation?**  
+> You can find the full and up-to-date documentation for this repository on our help guides:  
+> 👉 [Community Edition Documentation](https://www.passbolt.com/docs/hosting/install/ce/ansible/)  
+> 👉 [Pro Edition Documentation](https://www.passbolt.com/docs/hosting/install/pro/ansible/)
+>
+> We strongly recommend referring to it for setup instructions, configuration details, and troubleshooting tips.
+
+
 ## Variables
 
 ### Database configuration
