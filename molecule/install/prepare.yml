@@ -1,0 +1,44 @@
+---
+- name: Prepare test system
+  hosts: all
+  become: true
+  tasks:
+    - name: Update package cache on Debian
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == "Debian"
+
+#    - name: Update package cache on RedHat
+#      dnf:
+#        update_cache: yes
+#      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Swap curl-minimal with curl on RedHat
+      ansible.builtin.command: dnf swap -y curl-minimal curl
+      changed_when: false
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Install chrony on Debian
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Install acl on RedHat
+      ansible.builtin.dnf:
+        name: acl
+        state: present
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Copy database credentials
+      ansible.builtin.copy:
+        src: ../../group_vars/all.yml
+        dest: /tmp/db_test_credentials.yml
+        mode: '0600'
+
+#    - name: Install chrony on RedHat
+#      dnf:
+#        name: chrony
+#        state: present
+#      when: ansible_facts['os_family'] == "RedHat"
