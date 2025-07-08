@@ -1,11 +1,3 @@
 ---
 - name: Converge
   import_playbook: ../../install.yml
-
-
-# - name: Converge
-#   hosts: all
-#   gather_facts: false
-#   tasks:
-#     - name: Import Passbolt install
-#       import_playbook: ../install.yml

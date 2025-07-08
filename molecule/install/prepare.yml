@@ -9,10 +9,10 @@
         cache_valid_time: 3600
       when: ansible_facts['os_family'] == "Debian"
 
-#    - name: Update package cache on RedHat
-#      dnf:
-#        update_cache: yes
-#      when: ansible_facts['os_family'] == "RedHat"
+    - name: Update package cache on RedHat
+      ansible.builtin.dnf:
+        update_cache: true
+      when: ansible_facts['os_family'] == "RedHat"
 
     - name: Swap curl-minimal with curl on RedHat
       ansible.builtin.command: dnf swap -y curl-minimal curl
@@ -37,8 +37,8 @@
         dest: /tmp/db_test_credentials.yml
         mode: '0600'
 
-#    - name: Install chrony on RedHat
-#      dnf:
-#        name: chrony
-#        state: present
-#      when: ansible_facts['os_family'] == "RedHat"
+    - name: Install chrony on RedHat
+      ansible.builtin.dnf:
+        name: chrony
+        state: present
+      when: ansible_facts['os_family'] == "RedHat"
