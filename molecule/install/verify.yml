@@ -1,0 +1,9 @@
+---
+- name: Verify Passbolt installation
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - ../../group_vars/all.yml
+  tasks:
+    - name: Verify MariaDB configuration
+      ansible.builtin.import_tasks: verify/01_mariadb.yml

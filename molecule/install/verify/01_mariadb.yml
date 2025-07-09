@@ -1,0 +1,123 @@
+- name: Ensure MariaDB service is running and enabled
+  ansible.builtin.service:
+    name: mariadb
+    state: started
+    enabled: true
+
+- name: Wait for MariaDB to be available
+  community.mysql.mysql_query:
+    query: "SELECT 1;"
+    login_user: "{{ database_configuration.username }}"
+    login_password: "{{ database_configuration.password }}"
+    login_host: "127.0.0.1"
+    login_db: "{{ database_configuration.dbname }}"
+  register: mysql_ready
+  retries: 5
+  delay: 3
+  until: mysql_ready is succeeded
+  changed_when: false
+
+- name: Test MariaDB connection and CRUD permissions
+  module_defaults:
+    community.mysql.mysql_query:
+      login_user: "{{ database_configuration.username }}"
+      login_password: "{{ database_configuration.password }}"
+      login_host: "127.0.0.1"
+      login_db: "{{ database_configuration.dbname }}"
+  block:
+    - name: Drop test table if exists before test
+      community.mysql.mysql_query:
+        query: DROP TABLE IF EXISTS test_permission_check;
+
+    - name: Create test table
+      community.mysql.mysql_query:
+        query: |
+          CREATE TABLE IF NOT EXISTS test_permission_check (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            data VARCHAR(255)
+          );
+
+    - name: Check table exists - get table list
+      community.mysql.mysql_query:
+        query: SHOW TABLES LIKE 'test_permission_check';
+      register: table_check
+      changed_when: false
+
+    - name: Assert table creation
+      ansible.builtin.assert:
+        that:
+          - table_check.query_result | length > 0
+        fail_msg: "Table 'test_permission_check' was not created"
+        success_msg: "Table successfully created"
+
+    - name: Insert test row
+      community.mysql.mysql_query:
+        query: INSERT INTO test_permission_check (data) VALUES ('test_insert');
+
+    - name: Verify insert
+      community.mysql.mysql_query:
+        query: SELECT COUNT(*) AS total FROM test_permission_check WHERE data = 'test_insert';
+      register: insert_check
+      changed_when: false
+
+    - name: Assert insert success
+      ansible.builtin.assert:
+        that:
+          - insert_check.query_result is defined
+          - (insert_check.query_result[0][0].total | int) == 1
+        fail_msg: "Row was not inserted correctly"
+        success_msg: "Row inserted successfully"
+
+    - name: Update test row
+      community.mysql.mysql_query:
+        query: UPDATE test_permission_check SET data = 'test_update' WHERE data = 'test_insert';
+
+    - name: Verify update
+      community.mysql.mysql_query:
+        query: SELECT COUNT(*) AS total FROM test_permission_check WHERE data = 'test_update';
+      register: update_check
+      changed_when: false
+
+    - name: Assert update success
+      ansible.builtin.assert:
+        that:
+          - update_check.query_result is defined
+          - (update_check.query_result[0][0].total | int) == 1
+        fail_msg: "Update failed or did not affect any rows"
+        success_msg: "Row updated successfully"
+
+    - name: Delete test row
+      community.mysql.mysql_query:
+        query: DELETE FROM test_permission_check WHERE data = 'test_update';
+
+    - name: Verify delete
+      community.mysql.mysql_query:
+        query: SELECT COUNT(*) AS total FROM test_permission_check WHERE data = 'test_update';
+      register: delete_check
+      changed_when: false
+
+    - name: Assert delete success
+      ansible.builtin.assert:
+        that:
+          - delete_check.query_result is defined
+          - (delete_check.query_result[0][0].total | int) == 0
+        fail_msg: "Delete failed, row still exists"
+        success_msg: "Row deleted successfully"
+
+    - name: Drop test table
+      community.mysql.mysql_query:
+        query: DROP TABLE IF EXISTS test_permission_check;
+      register: drop_result
+
+    - name: Check table dropped
+      community.mysql.mysql_query:
+        query: SHOW TABLES LIKE 'test_permission_check';
+      register: drop_check
+      changed_when: false
+
+    - name: Assert drop success
+      ansible.builtin.assert:
+        that:
+          - drop_check.query_result[0] | length == 0
+        fail_msg: "Table 'test_permission_check' was not dropped"
+        success_msg: "Table dropped successfully"
