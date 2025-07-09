@@ -7,6 +7,7 @@
   tasks:
     - name: Verify MariaDB configuration
       ansible.builtin.import_tasks: verify/01_mariadb.yml
-
+    - name: Verify Chrony (NTP) configuration
+      ansible.builtin.import_tasks: verify/03_chrony.yml
     - name: Verify PHP configuration
       ansible.builtin.import_tasks: verify/04_php_configuration.yml
