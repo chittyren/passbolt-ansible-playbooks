@@ -14,8 +14,6 @@
     stdin: |
       Key-Type: RSA
       Key-Length: 3072
-      Subkey-Type: RSA
-      Subkey-Length: 3072
       Name-Real: {{ passbolt_configuration.gpg_name }}
       Name-Email: {{ passbolt_configuration.gpg_email }}
       Expire-Date: 0
