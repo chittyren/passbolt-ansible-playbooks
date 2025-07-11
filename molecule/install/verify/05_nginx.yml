@@ -1,0 +1,128 @@
+- name: Check if nginx service is installed and running with systemd
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
+  check_mode: true
+  register: nginx_systemd_check
+  ignore_errors: true
+
+- name: Assert nginx service is running and enabled
+  ansible.builtin.assert:
+    that:
+      - nginx_systemd_check is not failed
+    fail_msg: "NGINX service is not running or not enabled."
+    success_msg: "NGINX service is running and enabled."
+
+- name: Check if Passbolt NGINX config exists
+  ansible.builtin.stat:
+    path: "{{ passbolt_conf_path }}"
+  register: passbolt_nginx_conf
+
+- name: Assert Passbolt NGINX config exists
+  ansible.builtin.assert:
+    that:
+      - passbolt_nginx_conf.stat.exists
+    fail_msg: "Passbolt NGINX config file was expected at {{ passbolt_conf_path }} but does not exist."
+    success_msg: "Passbolt NGINX config file exists at {{ passbolt_conf_path }}."
+
+- name: Read Passbolt NGINX config content
+  ansible.builtin.slurp:
+    src: "{{ passbolt_conf_path }}"
+  register: passbolt_nginx_conf_content
+
+- name: Assert Passbolt config is not empty
+  ansible.builtin.assert:
+    that:
+      - (passbolt_nginx_conf_content.content | b64decode | length) > 0
+    fail_msg: "Passbolt config file is empty at {{ passbolt_conf_path }}"
+    success_msg: "Passbolt config file is not empty."
+
+- name: Detect if SSL is enabled in Passbolt config
+  ansible.builtin.set_fact:
+    ssl_enabled: >-
+      {{
+        (passbolt_nginx_conf_content.content | b64decode)
+          is search('ssl_certificate')
+      }}
+
+- name: List open ports and services (ss)
+  ansible.builtin.command: ss -tulpn
+  register: ss_output
+  changed_when: false
+  failed_when: false
+
+- name: Assert ports when SSL is disabled
+  when: not (ssl_enabled | default(false) | bool)
+  block:
+    - name: Assert only port 80 is listening
+      ansible.builtin.assert:
+        that:
+          - ss_output.stdout_lines | select('search', '0.0.0.0:80')  | list | length > 0
+          - ss_output.stdout_lines | select('search', '\\[::\\]:80')  | list | length > 0
+          - ss_output.stdout_lines | select('search', ':443') | list | length == 0
+        fail_msg: "Expected only port 80 to be open (SSL disabled); port 443 is also open or port 80 is closed."
+        success_msg: "Port 80 is open and port 443 is closed (SSL disabled)."
+
+    - name: Assert NGINX is bound to port 80 only
+      ansible.builtin.assert:
+        that:
+          - ss_output.stdout_lines | select('search', '0.0.0.0:80.*nginx')  | list | length > 0
+          - ss_output.stdout_lines | select('search', '\\[::\\]:80.*nginx')  | list | length > 0
+          - ss_output.stdout_lines | select('search', ':443.*nginx') | list | length == 0
+        fail_msg: "NGINX should listen only on port 80 (SSL disabled)."
+        success_msg: "NGINX correctly listens only on port 80 (SSL disabled)."
+
+- name: Assert ports when SSL is enabled
+  when: ssl_enabled | default(false) | bool
+  block:
+    - name: Assert both ports 80 and 443 are listening
+      ansible.builtin.assert:
+        that:
+          - ss_output.stdout_lines | select('search', '0.0.0.0:80')  | list | length > 0
+          - ss_output.stdout_lines | select('search', '\\[::\\]:80') | list | length > 0
+          - ss_output.stdout_lines | select('search', '0.0.0.0:443') | list | length > 0
+          - ss_output.stdout_lines | select('search', '\\[::\\]:443') | list | length > 0
+        fail_msg: "Both ports 80 and 443 must be open (SSL enabled)."
+        success_msg: "Ports 80 and 443 are open (SSL enabled)."
+
+    - name: Assert NGINX is bound to ports 80 and 443
+      ansible.builtin.assert:
+        that:
+          - ss_output.stdout_lines | select('search', '0.0.0.0:80.*nginx')  | list | length > 0
+          - ss_output.stdout_lines | select('search', '\\[::\\]:80.*nginx')  | list | length > 0
+          - ss_output.stdout_lines | select('search', '0.0.0.0:443.*nginx') | list | length > 0
+          - ss_output.stdout_lines | select('search', '\\[::\\]:443.*nginx') | list | length > 0
+        fail_msg: "NGINX should listen on both ports 80 and 443 (SSL enabled)."
+        success_msg: "NGINX correctly listens on both ports 80 and 443 (SSL enabled)."
+
+- name: List only non-essential open TCP ports (excluding HTTP, HTTPS, MySQL, SSH)
+  ansible.builtin.command: >
+    sh -c "ss -lntu --no-header |
+           awk '{print \$5}' |
+           grep -Eo '[0-9.:]+:[0-9]+' |
+           grep -Ev ':((80)|(443)|(22)|(3306))$' || true"
+  register: non_essential_ports
+  changed_when: false
+  failed_when: false
+
+- name: Assert that no non-essential ports are open
+  ansible.builtin.assert:
+    that:
+      - non_essential_ports.stdout_lines | length == 0
+    fail_msg: "Some non-essential ports are open:\n{{ non_essential_ports.stdout_lines | join('\n') }}"
+    success_msg: "Only essential ports (80, 443, 22, 3306) are open."
+
+- name: Wait for HTTP on port 80
+  ansible.builtin.wait_for:
+    port: 80
+    host: "{{ inventory_hostname }}"
+    timeout: 10
+
+- name: Validate that HTTP is accessible externally
+  ansible.builtin.uri:
+    url: http://localhost/
+    return_content: false
+    status_code: 200
+  register: http_response
+  failed_when: http_response.status != 200

@@ -4,9 +4,19 @@
   gather_facts: true
   vars_files:
     - ../../group_vars/all.yml
+  vars:
+    passbolt_conf_path: >-
+      {{
+        (ansible_os_family == "RedHat")
+          | ternary('/etc/nginx/conf.d/passbolt.conf',
+                    '/etc/nginx/sites-enabled/passbolt.conf')
+      }}
   tasks:
     - name: Verify MariaDB configuration
       ansible.builtin.import_tasks: verify/01_mariadb.yml
 
     - name: Verify PHP configuration
       ansible.builtin.import_tasks: verify/04_php_configuration.yml
+
+    - name: Verify Nginx Configuration
+      ansible.builtin.import_tasks: verify/05_nginx.yml
