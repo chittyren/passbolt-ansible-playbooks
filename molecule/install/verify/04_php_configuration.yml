@@ -1,0 +1,73 @@
+- name: Ensure PHP is installed
+  ansible.builtin.command: which php
+  register: php_path
+  changed_when: false
+  failed_when: php_path.rc != 0
+
+- name: Get PHP version (major.minor)
+  ansible.builtin.command: php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;"
+  register: php_version
+  failed_when: php_version.stdout == ""
+  changed_when: false
+
+- name: Set PHP-FPM socket path
+  ansible.builtin.set_fact:
+    php_fpm_socket_path: >-
+      {{
+        (ansible_os_family == 'RedHat')
+          | ternary('/run/php-fpm/www.sock',
+                    '/run/php/php' + php_version.stdout + '-fpm.sock')
+      }}
+
+- name: Stat PHP-FPM socket
+  ansible.builtin.stat:
+    path: "{{ php_fpm_socket_path }}"
+  register: php_fpm_socket_stat
+
+- name: Assert PHP version is between 8.2 and 8.3
+  ansible.builtin.assert:
+    that:
+      - "8.2 <= (php_version.stdout | float) <= 8.3"
+    fail_msg: "PHP version {{ php_version.stdout }} NOT between 8.2 and 8.3"
+    success_msg: "PHP version {{ php_version.stdout }} OK"
+
+- name: Assert PHP-FPM socket exists
+  ansible.builtin.assert:
+    that:
+      - php_fpm_socket_stat.stat.exists
+    fail_msg: "PHP-FPM socket {{ php_fpm_socket_path }} does NOT exist"
+    success_msg: "PHP-FPM socket {{ php_fpm_socket_path }} exists"
+
+- name: Set default passbolt_edition if undefined
+  ansible.builtin.set_fact:
+    passbolt_edition: "{{ passbolt_edition | default('CE') }}"
+
+- name: Check PHP ldap module presence based on Passbolt edition
+  vars:
+    expected_ldap_presence: "{{ (passbolt_edition | default('CE')) == 'pro' }}"
+  block:
+    - name: Get installed PHP modules
+      ansible.builtin.command: php -m
+      register: php_modules_installed
+      changed_when: false
+
+    - name: Assert PHP ldap module state matches expected for edition
+      ansible.builtin.assert:
+        that:
+          - >
+            (
+              ('ldap' in (php_modules_installed.stdout_lines | map('lower') | list))
+              == expected_ldap_presence
+            )
+        fail_msg: >-
+          The 'ldap' PHP module is {{
+            expected_ldap_presence | ternary('required', 'not allowed')
+          }} in {{ passbolt_edition | default('CE') }} edition,
+          but it is {{
+            ('ldap' in (php_modules_installed.stdout_lines | map('lower') | list))
+              | ternary('installed', 'missing')
+          }}.
+        success_msg: >-
+          PHP ldap module presence is correct for {{
+            passbolt_edition | default('CE')
+          }} edition.
