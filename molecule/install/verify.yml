@@ -18,6 +18,7 @@
       ansible.builtin.import_tasks: verify/03_chrony.yml
     - name: Verify PHP configuration
       ansible.builtin.import_tasks: verify/04_php_configuration.yml
-
     - name: Verify Nginx Configuration
       ansible.builtin.import_tasks: verify/05_nginx.yml
+    - name: Verify Passbolt configuration
+      ansible.builtin.import_tasks: verify/06_passbolt.yml
