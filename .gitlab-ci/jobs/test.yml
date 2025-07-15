@@ -1,0 +1,12 @@
+molecule:
+  stage: test
+  before_script:
+    - mkdir -p /root/.config/containers/
+    - |
+      cat > /root/.config/containers/containers.conf << EOF
+      [containers]
+      utsns="private"
+      EOF
+    - pip install molecule-plugins[podman]
+  script:
+    - molecule test -s install

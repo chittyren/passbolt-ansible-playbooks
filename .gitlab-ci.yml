@@ -1,10 +1,15 @@
-image: ${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/alpine:latest
+image: ghcr.io/ansible/community-ansible-dev-tools:latest
 
 variables:
   ANSIBLE_CONFIG: "${CI_PROJECT_DIR}/ansible.cfg"
 
 stages:
   - lint
+  - test
+
+before_script:
+  - ansible-galaxy collection install -r requirements.yml
 
 include:
   - local: "/.gitlab-ci/jobs/lint.yml"
+  - local: "/.gitlab-ci/jobs/test.yml"
