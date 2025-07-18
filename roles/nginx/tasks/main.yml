@@ -70,6 +70,7 @@
     owner: root
     group: root
     mode: '0644'
+    force: false
   notify:
     - Restart NGINX service
 
