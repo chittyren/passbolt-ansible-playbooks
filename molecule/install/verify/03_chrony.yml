@@ -1,0 +1,41 @@
+---
+- name: Check if chronyd is installed
+  ansible.builtin.command: which chronyd
+  register: chronyd_path
+  failed_when: chronyd_path.rc != 0
+  changed_when: false
+
+- name: Run chronyd
+  ansible.builtin.command: chronyd -x
+  async: 10
+  poll: 0
+  changed_when: true
+  when: chronyd_path.rc == 0
+
+- name: Wait some seconds for chronyd to initialize
+  ansible.builtin.pause:
+    seconds: 5
+  when: chronyd_path.rc == 0
+
+- name: Run chronyc tracking to verify synchronization
+  ansible.builtin.command: chronyc tracking
+  register: chronyc_tracking
+  failed_when: chronyc_tracking.rc != 0
+  changed_when: false
+  retries: 5
+  delay: 3
+  until: chronyc_tracking.rc == 0
+  when: chronyd_path.rc == 0
+
+- name: Assert chronyd tracking output looks valid
+  ansible.builtin.assert:
+    that:
+      - chronyc_tracking.stdout is search("Reference ID|Leap status|Stratum")
+    fail_msg: "chronyc tracking output is invalid or chronyd not synchronized"
+  when: chronyd_path.rc == 0
+
+- name: Stop all chronyd processes started for test
+  ansible.builtin.command: pkill chronyd
+  failed_when: false
+  changed_when: true
+  when: chronyd_path.rc == 0
