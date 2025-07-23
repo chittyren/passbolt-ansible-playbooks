@@ -116,13 +116,14 @@
 - name: Wait for HTTP on port 80
   ansible.builtin.wait_for:
     port: 80
-    host: "{{ inventory_hostname }}"
     timeout: 10
 
-- name: Validate that HTTP is accessible externally
+- name: Validate that HTTPS is accessible externally (ignoring SSL + following redirects)
   ansible.builtin.uri:
     url: http://localhost/
+    validate_certs: false
+    follow_redirects: all
     return_content: false
     status_code: 200
-  register: http_response
-  failed_when: http_response.status != 200
+  register: https_response
+  failed_when: https_response.status != 200

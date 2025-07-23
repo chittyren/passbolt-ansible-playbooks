@@ -31,14 +31,27 @@
         state: present
       when: ansible_facts['os_family'] == "RedHat"
 
-    - name: Copy database credentials
-      ansible.builtin.copy:
-        src: ../../group_vars/all.yml
-        dest: /tmp/db_test_credentials.yml
-        mode: '0600'
-
     - name: Install chrony on RedHat
       ansible.builtin.dnf:
         name: chrony
         state: present
       when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Ensure firewalld is installed and started
+      ansible.builtin.package:
+        name: firewalld
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure firewalld is started and enabled
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure python3-firewall is installed
+      ansible.builtin.package:
+        name: python3-firewall
+        state: present
+      when: ansible_os_family == 'RedHat'

@@ -1,11 +1,22 @@
-image: ghcr.io/ansible/community-ansible-dev-tools:latest
+default:
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+      - api_failure
+      - stale_schedule
+
+image: ghcr.io/ansible/community-ansible-dev-tools:v25.5.2
 
 variables:
   ANSIBLE_CONFIG: "${CI_PROJECT_DIR}/ansible.cfg"
 
 stages:
   - lint
-  - test
+  - test ce
+  - test pro
+
 
 before_script:
   - ansible-galaxy collection install -r requirements.yml
@@ -13,3 +24,4 @@ before_script:
 include:
   - local: "/.gitlab-ci/jobs/lint.yml"
   - local: "/.gitlab-ci/jobs/test.yml"
+
