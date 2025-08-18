@@ -1,0 +1,67 @@
+.molecule-debian12:
+  before_script:
+    - mkdir -p /root/.config/containers/
+    - |
+      cat > /root/.config/containers/containers.conf << EOF
+      [containers]
+      utsns="private"
+      EOF
+    - pip install molecule-plugins[podman]
+  variables:
+    MOLECULE_IMAGE: "${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/geerlingguy/docker-debian12-ansible:latest"
+
+  script:
+    - molecule test
+
+.test-deb-ce:
+  stage: test ce
+  extends: .molecule-debian12
+  variables:
+    PASSBOLT_FLAVOUR: "ce"
+   
+.test-deb-pro:
+  stage: test pro
+  extends: .molecule-debian12
+  variables:
+    PASSBOLT_FLAVOUR: "pro"
+
+    
+.molecule-rpm:
+  stage: test
+  before_script:
+    - mkdir -p /root/.config/containers/
+    - |
+      cat > /root/.config/containers/containers.conf << EOF
+      [containers]
+      utsns="private"
+      EOF
+    - pip install molecule-plugins[podman]
+  variables:
+    MOLECULE_IMAGE: "${CI_DEPENDENCY_PROXY_DIRECT_GROUP_IMAGE_PREFIX}/geerlingguy/docker-rockylinux9-ansible:latest"
+
+  script:
+    - molecule test
+
+.test-rpm-ce:
+  stage: test ce
+  extends: .molecule-rpm
+  variables:
+    PASSBOLT_FLAVOUR: "ce"
+   
+.test-rpm-pro:
+  stage: test pro
+  extends: .molecule-rpm
+  variables:
+    PASSBOLT_FLAVOUR: "pro"
+
+Debian 12 CE: 
+  extends: .test-deb-ce
+
+Debian 12 PRO: 
+  extends: .test-deb-pro
+
+Rocky 9 CE:
+  extends: .test-rpm-ce
+
+Rocky 9 PRO:
+  extends: .test-rpm-pro

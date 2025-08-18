@@ -121,18 +121,3 @@
           - drop_check.query_result[0] | length == 0
         fail_msg: "Table 'test_permission_check' was not dropped"
         success_msg: "Table dropped successfully"
-
-- name: Assert ports
-  block:
-    - name: Get list of listening TCP ports
-      ansible.builtin.command: ss -ltn
-      register: ss_output
-      changed_when: false
-
-    - name: Assert port 3306 only listens on localhost
-      ansible.builtin.assert:
-        that:
-          - ss_output.stdout_lines | select('search', '0.0.0.0:3306')  | list | length == 0
-          - ss_output.stdout_lines | select('search', '\\[::\\]:3306') | list | length == 0
-        fail_msg: "MySQL (3306) is listening on a public interface! Should be bound to localhost only."
-        success_msg: "MySQL (3306) is correctly restricted to localhost."

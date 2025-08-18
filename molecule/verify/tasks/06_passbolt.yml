@@ -177,7 +177,8 @@
 
 - name: Get Healthcheck errors
   ansible.builtin.command: >
-    su -s /bin/bash -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck --hide-pass" www-data
+    su -s /bin/bash -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck --hide-pass"
+    {{ (ansible_facts['os_family'] == 'Debian') | ternary('www-data', 'nginx') }}
   register: healthcheck
   changed_when: false
 

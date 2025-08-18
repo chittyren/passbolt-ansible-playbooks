@@ -17,6 +17,13 @@
 >
 > We strongly recommend referring to it for setup instructions, configuration details, and troubleshooting tips.
 
+## Ansible Galaxy modules
+
+You can install the required Ansible Galaxy modules using the following command:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
 
 ## Variables
 
