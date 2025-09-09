@@ -1,0 +1,11 @@
+- name: Playbook
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Définir des variables dynamiques
+      ansible.builtin.set_fact:
+        passbolt_edition: "{{ lookup('env', 'PASSBOLT_FLAVOUR') }}"
+- name: Import
+  import_playbook: ../install.yml

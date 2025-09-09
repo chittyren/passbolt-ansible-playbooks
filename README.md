@@ -9,6 +9,22 @@
 	Copyright (c) 2025 Passbolt SA
 	https://www.passbolt.com
 
+
+> 📘 **Looking for the official documentation?**  
+> You can find the full and up-to-date documentation for this repository on our help guides:  
+> 👉 [Community Edition Documentation](https://www.passbolt.com/docs/hosting/install/ce/ansible/)  
+> 👉 [Pro Edition Documentation](https://www.passbolt.com/docs/hosting/install/pro/ansible/)
+>
+> We strongly recommend referring to it for setup instructions, configuration details, and troubleshooting tips.
+
+## Ansible Galaxy modules
+
+You can install the required Ansible Galaxy modules using the following command:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
+
 ## Variables
 
 ### Database configuration

@@ -1,0 +1,30 @@
+---
+- name: Verify Passbolt installation
+  hosts: all
+  gather_facts: true
+  pre_tasks:
+    - name: Set Passbolt edition for pro
+      ansible.builtin.set_fact:
+        passbolt_edition: "{{ lookup('env', 'PASSBOLT_FLAVOUR') }}"
+  vars_files:
+    - group_vars/all.yml
+  vars:
+    passbolt_conf_path: >-
+      {{
+        (ansible_os_family == "RedHat")
+          | ternary('/etc/nginx/conf.d/passbolt.conf',
+                    '/etc/nginx/sites-enabled/passbolt.conf')
+      }}
+  tasks:
+    - name: Verify MariaDB configuration
+      ansible.builtin.import_tasks: verify/tasks/01_mariadb.yml
+    - name: Verify GPG key
+      ansible.builtin.import_tasks: verify/tasks/02_gpg_key.yml
+    - name: Verify Chrony (NTP) configuration
+      ansible.builtin.import_tasks: verify/tasks/03_chrony.yml
+    - name: Verify PHP configuration
+      ansible.builtin.import_tasks: verify/tasks/04_php_configuration.yml
+    - name: Verify Nginx Configuration
+      ansible.builtin.import_tasks: verify/tasks/05_nginx.yml
+    - name: Verify Passbolt configuration
+      ansible.builtin.import_tasks: verify/tasks/06_passbolt.yml

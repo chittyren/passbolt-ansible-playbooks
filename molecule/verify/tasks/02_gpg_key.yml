@@ -1,0 +1,130 @@
+- name: Define reference fingerprint
+  vars:
+    reference_fingerprint: "fpr:::::::::3d1a0346c8e1802f774aef21de8b853fc155581d:"
+    keyring_paths:
+      Debian: "/usr/share/keyrings/passbolt-repository.gpg"
+      RedHat: "/etc/pki/rpm-gpg/RPM-GPG-KEY-passbolt"
+  ansible.builtin.set_fact:
+    reference_fingerprint: "{{ reference_fingerprint }}"
+    keyring_path: "{{ keyring_paths[ansible_facts['os_family']] }}"
+
+- name: Ensure keyring file exists (Debian only)
+  ansible.builtin.stat:
+    path: "{{ keyring_path }}"
+  register: keyring_stat
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Fail if keyring file is missing (Debian only)
+  ansible.builtin.fail:
+    msg: "GPG keyring file not found at {{ keyring_path }}"
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - not keyring_stat.stat.exists
+
+- name: Debian local fingerprint extraction
+  when: ansible_facts['os_family'] == 'Debian'
+  block:
+    - name: Extract fingerprint from installed key (Debian)
+      ansible.builtin.command: >
+        gpg --no-default-keyring --keyring {{ keyring_path }}
+            --with-fingerprint --with-colons --import-options show-only
+            --import {{ keyring_path }}
+      register: local_gpg_fpr
+      changed_when: false
+      failed_when: local_gpg_fpr.rc != 0
+
+    - name: Get fingerprint lines
+      ansible.builtin.set_fact:
+        local_fpr_lines: "{{ local_gpg_fpr.stdout_lines | select('search', '^fpr:') | list }}"
+
+    - name: Fail if no fingerprint found (Debian)
+      ansible.builtin.fail:
+        msg: "No fingerprint found in keyring output"
+      when: local_fpr_lines | length == 0
+
+    - name: Set local_fingerprint fact (Debian)
+      ansible.builtin.set_fact:
+        local_fingerprint: "{{ (local_fpr_lines[0] | regex_replace('^fpr:[^:]*(:[^:]*){9}:', '')).lower() }}"
+
+    - name: Assert Debian fingerprint match
+      ansible.builtin.assert:
+        that:
+          - local_fingerprint == reference_fingerprint
+        fail_msg: "Fingerprint mismatch: local '{{ local_fingerprint }}' vs expected '{{ reference_fingerprint }}'"
+
+- name: Rocky Linux 9 public key validation
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] | int == 9
+  block:
+    - name: Download Passbolt official public key
+      ansible.builtin.get_url:
+        url: https://download.passbolt.com/pub.key
+        dest: /tmp/passbolt_pub.key
+        mode: '0644'
+
+    - name: Extract fingerprint from downloaded key
+      ansible.builtin.command: >
+        gpg --with-fingerprint --with-colons --import-options show-only
+            /tmp/passbolt_pub.key
+      register: downloaded
+      changed_when: false
+
+    - name: Set downloaded fingerprint
+      ansible.builtin.set_fact:
+        downloaded_fpr: "{{ (downloaded.stdout_lines | select('search', '^fpr:') | list)[0]
+                          | regex_replace('^fpr:[^:]*(:[^:]*){9}:', '') | lower }}"
+
+    - name: Extract fingerprint from repo key used by dnf. # noqa command-instead-of-module
+      ansible.builtin.command: >
+        rpm -q gpg-pubkey --queryformat "%{VERSION}:%{SUMMARY}\n"
+      register: rpmkeys
+      changed_when: false
+
+    - name: Get passbolt repo keyid
+      ansible.builtin.set_fact:
+        passbolt_keyid: >
+          {{ (rpmkeys.stdout_lines | select('search', 'passbolt') | first).split(':')[0] }}
+
+    - name: Extract installed repo key fingerprint via rpm. # noqa command-instead-of-module
+      ansible.builtin.command: >
+        rpm -qi gpg-pubkey-{{ passbolt_keyid }}
+      register: rpminfo
+      changed_when: false
+
+    - name: Extract ascii armored public key from rpm info
+      ansible.builtin.set_fact:
+        ascii_pubkey: >-
+          {{
+            (rpminfo.stdout | regex_findall('(?s)-----BEGIN PGP PUBLIC KEY BLOCK-----.*?-----END PGP PUBLIC KEY BLOCK-----'))[0]
+          }}
+
+    - name: Save extracted public key to temporary file
+      ansible.builtin.copy:
+        dest: /tmp/passbolt_key.asc
+        content: "{{ ascii_pubkey }}"
+        mode: '0644'
+
+    - name: Extract fingerprint from ascii armored key
+      ansible.builtin.command: >
+        gpg --with-fingerprint --with-colons --import-options show-only /tmp/passbolt_key.asc
+      register: key_fpr_output
+      changed_when: false
+      failed_when: key_fpr_output.rc != 0
+
+    - name: Set fingerprint from rpm info key
+      ansible.builtin.set_fact:
+        rpm_fingerprint: >-
+          {{
+            (key_fpr_output.stdout_lines | select('search', '^fpr:') | list)[0]
+            | regex_replace('^fpr:.*?:((?:[^:]*:){8})([^:]*):.*$', '\\2')
+            | lower
+          }}
+
+    - name: Assert all fingerprints match
+      ansible.builtin.assert:
+        that:
+          - downloaded_fpr == reference_fingerprint
+          - rpm_fingerprint == reference_fingerprint
+        fail_msg: >
+          FPR mismatch: downloaded '{{ downloaded_fpr }}' or dnf-known '{{ rpm_fingerprint }}' vs expected '{{ reference_fingerprint }}'"

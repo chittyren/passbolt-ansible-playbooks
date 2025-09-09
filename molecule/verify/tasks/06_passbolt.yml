@@ -1,0 +1,187 @@
+---
+- name: Assert GPG home directory exists
+  ansible.builtin.stat:
+    path: /var/lib/passbolt/.gnupg
+  register: gpg_home_stat
+
+- name: Set expected owner based on OS family
+  ansible.builtin.set_fact:
+    webserver_user: "{{ (ansible_os_family == 'RedHat') | ternary('nginx', 'www-data') }}"
+
+- name: Assert GPG directory is present with correct perms
+  ansible.builtin.assert:
+    that:
+      - gpg_home_stat.stat.exists
+      - gpg_home_stat.stat.isdir
+      - gpg_home_stat.stat.mode == "0700"
+      - gpg_home_stat.stat.pw_name == webserver_user
+    fail_msg: "GPG home dir missing or permissions incorrect"
+
+- name: Check if GPG private key exists
+  ansible.builtin.stat:
+    path: /var/lib/passbolt/.gnupg/private-keys-v1.d
+  register: private_keys_stat
+
+- name: Assert GPG private key directory exists
+  ansible.builtin.assert:
+    that:
+      - private_keys_stat.stat.exists
+      - private_keys_stat.stat.isdir
+    fail_msg: "GPG private key directory missing — key likely not generated"
+
+- name: Check exported public key file
+  ansible.builtin.stat:
+    path: /etc/passbolt/gpg/serverkey.asc
+  register: pubkey_stat
+
+- name: Check exported private key file
+  ansible.builtin.stat:
+    path: /etc/passbolt/gpg/serverkey_private.asc
+  register: privkey_stat
+
+- name: Assert exported key files exist
+  ansible.builtin.assert:
+    that:
+      - pubkey_stat.stat.exists
+      - pubkey_stat.stat.pw_name == webserver_user
+      - privkey_stat.stat.exists
+      - privkey_stat.stat.pw_name == webserver_user
+    fail_msg: "Exported GPG keys not found"
+
+- name: Extract fingerprint from keyring, exported key, and config
+  block:
+    - name: Get fingerprint from keyring
+      ansible.builtin.command: >
+        gpg --homedir /var/lib/passbolt/.gnupg --with-colons --fingerprint {{ passbolt_configuration.gpg_email }}
+      register: keyring_fpr
+      changed_when: false
+      become: true
+      become_user: "{{ (ansible_os_family == 'RedHat') | ternary('nginx', 'www-data') }}"
+
+    - name: Get fingerprint from exported public key
+      ansible.builtin.command: >
+        gpg --with-colons --with-fingerprint --import-options show-only --import /etc/passbolt/gpg/serverkey.asc
+      register: exported_fpr
+      changed_when: false
+
+    - name: Get fingerprint from passbolt.php
+      ansible.builtin.shell: >
+        grep -oP "'fingerprint'\s*=>\s*'\K[A-F0-9]{40}" /etc/passbolt/passbolt.php
+      register: php_fpr
+      changed_when: false
+
+    - name: Set facts for fingerprints
+      ansible.builtin.set_fact:
+        keyring_fingerprint: "{{ (keyring_fpr.stdout_lines | select('search', '^fpr:') | list)[0].split(':')[9] }}"
+        exported_fingerprint: "{{ (exported_fpr.stdout_lines | select('search', '^fpr:') | list)[0].split(':')[9] }}"
+        config_fingerprint: "{{ php_fpr.stdout | trim }}"
+
+    - name: Debug fingerprints
+      ansible.builtin.debug:
+        msg:
+          - "Keyring fingerprint: {{ keyring_fingerprint }}"
+          - "Exported fingerprint: {{ exported_fingerprint }}"
+          - "Config fingerprint: {{ config_fingerprint }}"
+
+    - name: Assert fingerprint matches (keyring vs exported vs config)
+      ansible.builtin.assert:
+        that:
+          - keyring_fingerprint == exported_fingerprint
+          - keyring_fingerprint == config_fingerprint
+        fail_msg: |
+          Fingerprint mismatch detected:
+          - keyring: {{ keyring_fingerprint }}
+          - exported: {{ exported_fingerprint }}
+          - config: {{ config_fingerprint }}
+
+- name: Ensure JWT directory exists with correct permissions and ownership
+  ansible.builtin.stat:
+    path: /etc/passbolt/jwt
+  register: jwt_dir
+
+- name: Assert JWT directory is present and has correct properties
+  ansible.builtin.assert:
+    that:
+      - jwt_dir.stat.exists
+      - jwt_dir.stat.isdir
+      - jwt_dir.stat.mode == '0750'
+      - jwt_dir.stat.pw_name == 'root'
+      - jwt_dir.stat.gr_name == webserver_user
+    fail_msg: "JWT directory invalid: mode={{ jwt_dir.stat.mode }}, owner={{ jwt_dir.stat.pw_name }}, group={{ jwt_dir.stat.gr_name }}"
+
+- name: Set list of JWT key files to validate
+  ansible.builtin.set_fact:
+    jwt_key_files:
+      - jwt.key
+      - jwt.pem
+
+- name: Validate JWT key files
+  vars:
+    jwt_key_files:
+      - jwt.key
+      - jwt.pem
+  block:
+    - name: Stat JWT key file
+      ansible.builtin.stat:
+        path: "/etc/passbolt/jwt/{{ item }}"
+      register: jwt_key_stats
+      loop: "{{ jwt_key_files }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Assert JWT key files exist and have correct permissions and ownership
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+          - item.stat.mode == '0640'
+          - item.stat.pw_name == 'root'
+          - item.stat.gr_name == webserver_user
+        fail_msg: >
+          {{ item.stat.path }} invalid:
+          mode={{ item.stat.mode }},
+          owner={{ item.stat.pw_name }},
+          group={{ item.stat.gr_name }}
+      loop: "{{ jwt_key_stats.results }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+
+- name: Verify first Passbolt user and their role
+  module_defaults:
+    community.mysql.mysql_query:
+      login_user: "{{ database_configuration.username }}"
+      login_password: "{{ database_configuration.password }}"
+      login_host: "127.0.0.1"
+      login_db: "{{ database_configuration.dbname }}"
+  block:
+    - name: Load admin role ID
+      community.mysql.mysql_query:
+        query: |
+          SELECT u.id, u.username, u.created, r.name
+          FROM users AS u
+          INNER JOIN roles AS r ON u.role_id = r.id
+          ORDER BY u.created ASC
+          LIMIT 1;
+      register: first_user
+
+    - name: Assert first user is administrator
+      ansible.builtin.assert:
+        that:
+          - first_user.query_result is defined
+          - first_user.query_result[0][0].id is defined
+          - first_user.query_result[0][0].username is defined
+          - first_user.query_result[0][0].created is defined
+          - first_user.query_result[0][0].name == "admin"
+        fail_msg: "First user is not an administrator or query failed"
+        success_msg: "First user is an administrator"
+
+- name: Get Healthcheck errors
+  ansible.builtin.command: >
+    su -s /bin/bash -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck --hide-pass"
+    {{ (ansible_facts['os_family'] == 'Debian') | ternary('www-data', 'nginx') }}
+  register: healthcheck
+  changed_when: false
+
+- name: Show Healthcheck errors
+  ansible.builtin.debug:
+    var: healthcheck.stdout_lines
