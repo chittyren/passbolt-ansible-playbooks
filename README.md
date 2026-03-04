@@ -17,9 +17,30 @@
 >
 > We strongly recommend referring to it for setup instructions, configuration details, and troubleshooting tips.
 
-## Ansible Galaxy modules
+## Installation
 
-You can install the required Ansible Galaxy modules using the following command:
+### Option 1: Clone this repository
+
+Clone the repository and install the required collections listed in this project's `requirements.yml`:
+
+```bash
+git clone https://github.com/passbolt/passbolt-ansible-playbooks.git
+cd passbolt-ansible-playbooks
+ansible-galaxy collection install -r requirements.yml
+```
+
+### Option 2: Add to your requirements.yml
+
+Add the collection to your ansible project's requirements.yml:
+
+```yaml
+collections:
+  - name: https://github.com/passbolt/passbolt-ansible-playbooks.git
+    type: git
+    version: main
+```
+
+Then install with:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
