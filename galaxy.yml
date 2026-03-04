@@ -1,0 +1,16 @@
+namespace: passbolt
+name: passbolt_ansible_playbook
+version: 1.0.0
+readme: README.md
+
+authors:
+  - Passbolt
+
+license_file: LICENSE.md
+
+repository: https://github.com/passbolt/passbolt-ansible-playbooks
+homepage: https://www.passbolt.com/
+issues: https://github.com/passbolt/passbolt-ansible-playbooks/issues
+
+dependencies:
+  community.mysql: "*"
